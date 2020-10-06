@@ -1,0 +1,19 @@
+Arduino PIN --> hardware
+
+7   --> bme280 vin
+A5  --> bme280 scl
+A4  --> bme280 sda
+gnd --> bme280 gnd
+A0  --> battery voltage
+2   --> button
+A3  --> rfm95w DIO0
+3   --> rfm95w DIO1
+4   --> rfm95w DIO2
+5   --> rfm95w Reset
+6   --> rfm95w NSS
+11  --> rfm95w MOSI
+12  --> rfm95w MISO
+13  --> rfm95w SCK
+
+
+
