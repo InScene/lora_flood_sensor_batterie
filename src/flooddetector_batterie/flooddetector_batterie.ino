@@ -34,6 +34,7 @@
 #include "battery.h"
 #include "failsafe.h"
 #include "datastorage.h"
+#include "button.h"
 
 // Sende alle 10 Minuten eine Nachricht
 const unsigned TX_INTERVAL = 600;
@@ -44,6 +45,7 @@ failsafe::FailSafe g_resetDaily(86400 / TX_INTERVAL);
 failsafe::FailSafe g_wdtFailSafe(1000);
 failsafe::FailSafe g_loopFailSafe(2500000);
 datastorage::DataStorage g_dataStorage;
+button::Button g_button;
 
 bool next = false;
 #define ACTIVATE_PRINT 1
@@ -187,7 +189,8 @@ void setup() {
     useStoredValues();
     
     g_bmeSensor.init();
-    g_battery.init();    
+    g_battery.init();
+    g_button.init();    
 
     #ifdef VCC_ENABLE
     // For Pinoccio Scout boards
@@ -235,6 +238,12 @@ void sleepForATime() {
     {
       g_wdtFailSafe.increaseCnt();
       LowPower.returnToSleep();
+    }
+
+    if(g_button.isPressed()){
+      Serial.println(F("Button is pressed"));
+      Serial.flush(); // give the serial print chance to complete
+      g_button.reset();
     }
   }
    
