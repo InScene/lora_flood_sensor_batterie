@@ -23,9 +23,9 @@ void Button::pressed() {
 }
 
 void Button::init() {
-  // Lege den Interruptpin als Inputpin mit Pullupwiderstand fest
+  // Set the interrupt pin as input pin
   pinMode(button_int_Pin, INPUT);
-  // "Bei steigender Flanke auf dem Interruptpin" --> "Führe die ISR aus"
+  // "On rising edge on the interrupt pin" --> "Execute the ISR
   attachInterrupt(digitalPinToInterrupt(button_int_Pin), pressed, RISING);
 }
 
