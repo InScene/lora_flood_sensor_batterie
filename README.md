@@ -21,3 +21,6 @@ The data is sent in the CayenneLPP format every 10 minutes. The channels are ass
 * When the flood sensor detects water, a message with only parameter 5 (flood sensor = 1) will be send immediately. It will be send until a acknowledged is received. The led is blinking a few seconds too.
 * When the button is pressed, the led is blinking a few seconds and a message with all values and "test send = 1" is send.
 * Ensure that no bouncing occurs during water detection and that no repeated messages are send.
+
+Battery
+I use a 18650 directly connected. In one test a message could be sent down to the voltage of 3.41 V. 
