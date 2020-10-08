@@ -15,6 +15,10 @@ FailSafe::FailSafe(const unsigned long maxCnt) :
   
 }
 
+void FailSafe::set_maxCnt(const unsigned long maxCnt) {
+  _maxCount = maxCnt;
+}
+
 void FailSafe::increaseCnt() {
   if (++_cnt >= _maxCount) {
     _cnt = 0;

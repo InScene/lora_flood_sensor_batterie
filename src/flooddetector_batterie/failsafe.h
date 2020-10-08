@@ -9,8 +9,9 @@ namespace failsafe{
 
 class FailSafe{
   public:
-    FailSafe(const unsigned long maxCnt);
+    FailSafe(const unsigned long maxCnt = 3600);
 
+    void set_maxCnt(const unsigned long maxCnt);
     void increaseCnt();
     void resetCnt();
     
@@ -21,7 +22,7 @@ class FailSafe{
     void wdtOk();
     
   private:
-    const unsigned long _maxCount;
+    unsigned long _maxCount;
     unsigned long _cnt;
     
     // Resette Device jeden Tag
