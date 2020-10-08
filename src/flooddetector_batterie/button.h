@@ -19,6 +19,7 @@ class Button {
   private:
   
     static bool _isPressed;
+    static unsigned long _lastInterruptTime;
 };
 }
 #endif
