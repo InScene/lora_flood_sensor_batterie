@@ -35,6 +35,7 @@
 #include "failsafe.h"
 #include "datastorage.h"
 #include "button.h"
+#include "floodsensor.h"
 
 // Sende alle 10 Minuten eine Nachricht
 const unsigned TX_INTERVAL = 600;
@@ -46,6 +47,7 @@ failsafe::FailSafe g_wdtFailSafe(1000);
 failsafe::FailSafe g_loopFailSafe(2500000);
 datastorage::DataStorage g_dataStorage;
 button::Button g_button;
+floodsensor::FloodSensor g_floodSensor(8);
 
 bool next = false;
 #define ACTIVATE_PRINT 1
@@ -191,6 +193,7 @@ void setup() {
     g_bmeSensor.init();
     g_battery.init();
     g_button.init();    
+    g_floodSensor.init();
 
     #ifdef VCC_ENABLE
     // For Pinoccio Scout boards
@@ -242,6 +245,11 @@ void sleepForATime() {
 
     if(g_button.isPressed()){
       Serial.println(F("Button is pressed"));
+      Serial.flush(); // give the serial print chance to complete
+      g_button.reset();
+    }
+    if(g_floodSensor.floodDetected()){
+      Serial.println(F("Flood detected"));
       Serial.flush(); // give the serial print chance to complete
       g_button.reset();
     }
