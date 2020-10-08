@@ -14,11 +14,10 @@
  *  5. Flood sensor: 0=dry, 1=water detected
  *  6. Test send: 0=no test, 1=test message
  *  
- *  Receive raw little endian rain sense border values:
- *   Example: FF 00 90 01 9C 02
- *   FF 00 : 256 = cloudburst
- *   90 01 : 400 = heavy rain
- *   9c 02 : 668 = light rain
+ *  Receive raw little endian values:
+ *   Example: BE 00 32 00
+ *   BE 00 : 190 = send interval set to 190 seconds
+ *   32 00 : 50 = high temperature threshold set to 50°
  *   
  * ToDo:
  * Set keys in radio_keys.h (value from staging.thethingsnetwork.com)
@@ -36,20 +35,36 @@
 #include "datastorage.h"
 #include "button.h"
 #include "floodsensor.h"
-
-// Sende alle 10 Minuten eine Nachricht
-const unsigned TX_INTERVAL = 600;
+#include "led.h"
 
 bme280_sensor::BME280Sensor g_bmeSensor;
 battery::Battery g_battery;
-failsafe::FailSafe g_resetDaily(86400 / TX_INTERVAL);
+failsafe::FailSafe g_resetDaily;
 failsafe::FailSafe g_wdtFailSafe(1000);
 failsafe::FailSafe g_loopFailSafe(2500000);
 datastorage::DataStorage g_dataStorage;
 button::Button g_button;
 floodsensor::FloodSensor g_floodSensor(8);
+led::Led g_led(9);
 
+enum sendMode {
+  cyclic = 0,
+  flood = 1,
+  highTemp = 2,
+  test = 3
+};
+
+const uint8_t g_secondsDuringSleep = 8;
+const uint8_t g_floodCheckSleepCycles = (32 / 8); // Flood check sleep cycles (seconds in multiples of 8 / seconds during one sleep cycle)
+const uint8_t g_tempCheckSleepCycles = (304 / 8); // Temp check sleep cycles (seconds in multiples of 8 / seconds during one sleep cycle)
+
+unsigned g_txIntervall = 0;
+
+uint8_t g_sendMode = sendMode::cyclic;
+bool g_isFloodMsgAck = false;
+uint8_t g_highTempThreshold = 0;
 bool next = false;
+
 #define ACTIVATE_PRINT 1
 
 /****************************************** LoRa *******************************/
@@ -74,13 +89,32 @@ void onEvent (ev_t ev) {
     switch(ev) {
         case EV_JOINING:
             // Do noting, because we react on EV_JOINED
+            #ifdef ACTIVATE_PRINT
+              Serial.println(F("Event joining"));
+            #endif
             break;
         case EV_JOINED:
+            #ifdef ACTIVATE_PRINT
+              Serial.println(F("Event joined"));
+            #endif
             // Disable link check validation (automatically enabled
             // during join, but not supported by TTN at this time).
             LMIC_setLinkCheckMode(0);
             break;
         case EV_TXCOMPLETE:
+            #ifdef ACTIVATE_PRINT
+              Serial.println(F("Event txcomplete"));
+            #endif
+            if(sendMode::flood == g_sendMode) {
+              g_isFloodMsgAck = true;
+             
+            } else if(sendMode::cyclic == g_sendMode) {
+              if(!g_floodSensor.isFloodDetected()) {
+                g_isFloodMsgAck = false;
+              }
+              
+            }
+            
             if(LMIC.dataLen) { // data received in rx slot after tx
               handleRxData();
             }
@@ -88,7 +122,9 @@ void onEvent (ev_t ev) {
             next = true;            
             break;
         case EV_RXCOMPLETE:
-            Serial.println(F("Event rx complete"));
+            #ifdef ACTIVATE_PRINT
+              Serial.println(F("Event rx complete"));
+            #endif
             // Do nothing
             break;
         default:
@@ -97,25 +133,46 @@ void onEvent (ev_t ev) {
               Serial.print(F("Not Handled event. OnEvent: "));
               Serial.println(ev);
             #endif
+            if(sendMode::test == g_sendMode) {
+              g_led.flashing4Times();
+            }
             break;
     }    
 }
 
 void handleRxData() {
-//  if(LMIC.dataLen==6){
-//    Serial.println(F("Rx data with correct length received"));
-//    uint16_t rxData[3];
-//    memcpy(rxData, LMIC.frame + LMIC.dataBeg, LMIC.dataLen);
-//
-//    g_dataStorage.persist();
-//    g_dataStorage.print();
-//    useStoredValues();
-//  } else {
-//    #ifdef ACTIVATE_PRINT
-//      Serial.print(F("No correct rx data length received. Len:"));
-//      Serial.println(LMIC.dataLen);
-//    #endif
-//  }
+  if(LMIC.dataLen==4){
+    #ifdef ACTIVATE_PRINT
+      Serial.println(F("Rx data with correct length received"));
+    #endif
+    uint16_t rxData[2];
+    memcpy(rxData, LMIC.frame + LMIC.dataBeg, LMIC.dataLen);
+
+    uint16_t sendInterval = rxData[0];
+    uint16_t highTempThreshold = rxData[1];
+
+    // Send interval can only be between 190 seconds and one day
+    if(sendInterval >= 190 && sendInterval <= 86400) {
+      g_dataStorage.set_sendInterval(sendInterval);
+    }
+
+    // High temperature threshold can only be between 1°C and 84°C
+    if(highTempThreshold >= 1 && highTempThreshold <= 84) {
+      g_dataStorage.set_highTempThreshold(highTempThreshold);
+    }
+    
+    g_dataStorage.persist();
+    #ifdef ACTIVATE_PRINT
+      g_dataStorage.print();
+    #endif
+    useStoredValues();
+    
+  } else {
+    #ifdef ACTIVATE_PRINT
+      Serial.print(F("No correct rx data length received. Len:"));
+      Serial.println(LMIC.dataLen);
+    #endif
+  }
 }
 
 void do_send(osjob_t* j){
@@ -129,7 +186,8 @@ void do_send(osjob_t* j){
       #endif      
     } else {
       #ifdef ACTIVATE_PRINT
-        Serial.println(F("Fetch data"));
+        Serial.print(F("Fetch data in send mode: "));
+        Serial.println(g_sendMode);
       #endif
       CayenneLPP lpp = getCayenneFormatedData();
       
@@ -167,16 +225,25 @@ CayenneLPP getCayenneFormatedData() {
   #ifdef ACTIVATE_PRINT
     g_battery.print();
   #endif
- 
 
+  /**** get flood value *****/
+  uint8_t floodVal = 0;
+  (g_floodSensor.isFloodDetected()) ? floodVal = 1 : floodVal = 0;
+  lpp.addDigitalInput(5, floodVal);
+
+  /**** set test value *****/
+  uint8_t testVal = 0;
+  (sendMode::test == g_sendMode ) ? testVal = 1 : testVal = 0;
+  lpp.addDigitalInput(6, testVal);
+ 
   return lpp;
 }
 
-
 void useStoredValues() {
-//  g_rainSense.set_cloudburst(g_dataStorage.get_rainsenseCloudburstBorder());
-//  g_rainSense.set_heavyRain(g_dataStorage.get_rainsenseHeavyRainBorder());
-//  g_rainSense.set_lightRain(g_dataStorage.get_rainsenseLightRainBorder());
+  g_txIntervall = g_dataStorage.get_sendInterval();
+  g_highTempThreshold = g_dataStorage.get_highTempThreshold();
+
+  g_resetDaily.set_maxCnt(86400 / g_txIntervall);
 }
 
 
@@ -187,13 +254,16 @@ void setup() {
     #endif
 
     g_dataStorage.init();
-    g_dataStorage.print();
+    #ifdef ACTIVATE_PRINT
+      g_dataStorage.print();
+    #endif
     useStoredValues();
-    
+
     g_bmeSensor.init();
     g_battery.init();
     g_button.init();    
     g_floodSensor.init();
+    g_led.init();
 
     #ifdef VCC_ENABLE
     // For Pinoccio Scout boards
@@ -221,18 +291,64 @@ void setup() {
     #endif
 }
 
+bool doHighTempCheck() {
+  if(isHighTemperature()) {
+    g_sendMode = sendMode::highTemp;
+    #ifdef ACTIVATE_PRINT
+      Serial.print(F("High temperature detected: "));
+      Serial.println(g_bmeSensor.getTemperature());
+      Serial.flush(); // give the serial print chance to complete
+    #endif
+    
+    return true;
+  }
+  return false;
+}
 
+bool doFloodCheck() {
+  g_floodSensor.doFloodDetection();
+  // There is a flood and until now not acknowledged
+  if(!g_isFloodMsgAck && g_floodSensor.isFloodDetected()){
+    g_sendMode = sendMode::flood;
+    #ifdef ACTIVATE_PRINT
+      Serial.println(F("Flood detected"));
+      Serial.flush(); // give the serial print chance to complete
+    #endif
+    
+    return true;
+  } 
+  return false;
+}
+
+bool doTestButtonCheck() {
+  if(g_button.isPressed()){
+    g_button.reset();
+    g_led.switchOn();
+    g_sendMode = sendMode::test;
+    #ifdef ACTIVATE_PRINT
+      Serial.println(F("Button is pressed"));
+      Serial.flush(); // give the serial print chance to complete
+    #endif
+    
+    return true;
+  } 
+  return false;
+}
 
 void sleepForATime() {
-  const int sleepcycles = TX_INTERVAL / 8;  // calculate the number of sleepcycles (8s) given the TX_INTERVAL
+  const int sleepcycles = g_txIntervall / g_secondsDuringSleep;  // calculate the number of sleepcycles (g_secondsDuringSleep) given the g_txIntervall
+  const int floodCheckCycles = (g_floodCheckSleepCycles <= sleepcycles) ? g_floodCheckSleepCycles : sleepcycles;
+  const int tempCheckCycles = (g_tempCheckSleepCycles <= sleepcycles) ? g_tempCheckSleepCycles : sleepcycles;
   #ifdef ACTIVATE_PRINT
     Serial.print(F("Enter sleeping for "));
     Serial.print(sleepcycles);
     Serial.println(F(" cycles of 8 seconds"));
     Serial.flush(); // give the serial print chance to complete
   #endif
+
+  g_sendMode = sendMode::cyclic;
   
-  for (int i=0; i<sleepcycles; i++) {
+  for (int i=1; i<=sleepcycles; i++) {
     g_wdtFailSafe.resetCnt();
     // Enter power down state for 8 s with ADC and BOD module disabled
     LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF);
@@ -243,20 +359,26 @@ void sleepForATime() {
       LowPower.returnToSleep();
     }
 
-    if(g_button.isPressed()){
-      Serial.println(F("Button is pressed"));
-      Serial.flush(); // give the serial print chance to complete
-      g_button.reset();
+    // Flood check
+    if((i % floodCheckCycles == 0) && doFloodCheck()) {
+      break;
     }
-    if(g_floodSensor.floodDetected()){
-      Serial.println(F("Flood detected"));
-      Serial.flush(); // give the serial print chance to complete
-      g_button.reset();
+
+    // Temperature check
+    if((i % tempCheckCycles == 0) && doHighTempCheck()) {
+        break;
     }
+
+    // Test button check
+    if(doTestButtonCheck()){
+      break;
+    } 
+
+    g_led.switchOff();
   }
    
   #ifdef ACTIVATE_PRINT
-    Serial.println("******************* Sleep complete *******************");
+    Serial.println("******************* Sleep ended *******************");
   #endif
 }
 
@@ -271,11 +393,23 @@ void loop() {
     g_loopFailSafe.resetCnt();
 
     sleepForATime();
-    next = false;
-  
-    // Start job
-    do_send(&sendjob);
+    send_data();
   }
 
   g_loopFailSafe.increaseCnt();
+}
+
+void send_data() {
+  next = false;
+  
+  // Start job
+  do_send(&sendjob);
+}
+
+bool isHighTemperature() {
+  if(g_bmeSensor.fetchData() && 
+    (g_bmeSensor.getTemperature() >= g_highTempThreshold)) {
+      return true;
+  }
+  return false;
 }
