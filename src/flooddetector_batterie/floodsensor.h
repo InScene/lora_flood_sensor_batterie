@@ -10,7 +10,8 @@ class FloodSensor {
 
     FloodSensor(const uint8_t pin);
     void init();
-    bool floodDetected();
+    void doFloodDetection();
+    bool isFloodDetected() const;
 
   private:
   

@@ -13,9 +13,12 @@ void FloodSensor::init() {
   pinMode(_pin, INPUT);
 }
 
-bool FloodSensor::floodDetected() {
+void FloodSensor::doFloodDetection() {
   updateDetectCnt(digitalRead(_pin));
   updateFloodDetecedVal();
+}
+
+bool FloodSensor::isFloodDetected() const {
   return _floodDetected;
 }
 
