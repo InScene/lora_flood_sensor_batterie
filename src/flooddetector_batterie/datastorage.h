@@ -10,13 +10,11 @@ class DataStorage{
 
     void init();
 
-    uint16_t get_rainsenseCloudburstBorder();
-    uint16_t get_rainsenseHeavyRainBorder();
-    uint16_t get_rainsenseLightRainBorder();
+    uint16_t get_sendInterval();
+    uint16_t get_highTempThreshold();
 
-    void set_rainsenseCloudburstBorder(uint16_t val);
-    void set_rainsenseHeavyRainBorder(uint16_t val);
-    void set_rainsenseLightRainBorder(uint16_t val);
+    void set_sendInterval(uint16_t val);
+    void set_highTempThreshold(uint16_t val);
 
     void persist();
     void print();
@@ -24,13 +22,11 @@ class DataStorage{
     
   private:
     const uint8_t _crcAdr = 0;
-    const uint8_t _cloudBurstAdr = 4;
-    const uint8_t _heavyRainAdr = 6;
-    const uint8_t _lightRainAdr = 8;
+    const uint8_t _sendIntvAdr = 4;
+    const uint8_t _highTempThresholdAdr = 6;
     
-    uint16_t _cloudburst;
-    uint16_t _heavyRain;
-    uint16_t _lightRain;
+    uint16_t _sendInterval;
+    uint16_t _highTempThreshold;
 
     void readValues();
     void writeInt(uint16_t adr, uint16_t val);

@@ -5,9 +5,8 @@
 using namespace datastorage;
 
 DataStorage::DataStorage() :
-  _cloudburst(256),
-  _heavyRain(400),
-  _lightRain(668) {
+  _sendInterval(190),
+  _highTempThreshold(50) {
 }
 
 void DataStorage::init() {
@@ -19,36 +18,27 @@ void DataStorage::init() {
   }
 }
 
-uint16_t DataStorage::get_rainsenseCloudburstBorder() {
-  return _cloudburst;
+uint16_t DataStorage::get_sendInterval() {
+  return _sendInterval;
 }
 
-uint16_t DataStorage::get_rainsenseHeavyRainBorder() {
-  return _heavyRain;
+uint16_t DataStorage::get_highTempThreshold() {
+  return _highTempThreshold;
 }
 
-uint16_t DataStorage::get_rainsenseLightRainBorder() {
-  return _lightRain;
+void DataStorage::set_sendInterval(uint16_t val) {
+  _sendInterval = val;
 }
 
-void DataStorage::set_rainsenseCloudburstBorder(uint16_t val) {
-  _cloudburst = val;
-}
-
-void DataStorage::set_rainsenseHeavyRainBorder(uint16_t val) {
-  _heavyRain = val;
-}
-
-void DataStorage::set_rainsenseLightRainBorder(uint16_t val) {
-  _lightRain = val;
+void DataStorage::set_highTempThreshold(uint16_t val) {
+  _highTempThreshold = val;
 }
 
 void DataStorage::persist() {
   unsigned long old_crc = calculate_crc();
   
-  writeInt(_cloudBurstAdr, _cloudburst); 
-  writeInt(_heavyRainAdr, _heavyRain);
-  writeInt(_lightRainAdr, _lightRain);
+  writeInt(_sendIntvAdr, _sendInterval); 
+  writeInt(_highTempThresholdAdr, _highTempThreshold);
 
   unsigned long crc = calculate_crc();
   writeLong(_crcAdr, crc);
@@ -64,12 +54,10 @@ void DataStorage::persist() {
 }
 
 void DataStorage::print() {
-  Serial.print(F("Stored values. cloudburst:"));
-  Serial.print(_cloudburst);
-  Serial.print(F(", heavy rain:"));
-  Serial.print(_heavyRain);
-  Serial.print(F(", light rain:"));
-  Serial.println(_lightRain);
+  Serial.print(F("Stored values. Send interval:"));
+  Serial.print(_sendInterval);
+  Serial.print(F(", high temp threshold:"));
+  Serial.println(_highTempThreshold);
 }
 
 bool DataStorage::isValid() {
@@ -77,9 +65,8 @@ bool DataStorage::isValid() {
 }
 
 void DataStorage::readValues() {
-  _cloudburst = readInt(_cloudBurstAdr); 
-  _heavyRain = readInt(_heavyRainAdr);
-  _lightRain = readInt(_lightRainAdr);
+  _sendInterval = readInt(_sendIntvAdr); 
+  _highTempThreshold = readInt(_highTempThresholdAdr);
 }
 
 void DataStorage::writeInt(uint16_t adr, uint16_t val) {
