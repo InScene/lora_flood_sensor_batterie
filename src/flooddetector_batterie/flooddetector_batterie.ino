@@ -27,7 +27,8 @@
 #include <hal/hal.h>
 
 //#define ACTIVATE_PRINT 1
-#define SECONDS_DURING_SLEEP 8
+#define SECONDS_DURING_SLEEP 8 // Number of seconds the microcontroller is in deep sleep 
+#define SECONDS_TO_REBOOT 86400 // Number of seconds before a reboot is done to force a new ttn join. Security feature, to get a new key
 
 #include "LowPower.h"
 #include <CayenneLPP.h>
@@ -42,7 +43,7 @@
 
 bme280_sensor::BME280Sensor g_bmeSensor;
 battery::Battery g_battery;
-failsafe::FailSafe g_resetDaily;
+failsafe::FailSafe g_forceReset;
 failsafe::FailSafe g_wdtFailSafe(1000);
 failsafe::FailSafe g_loopFailSafe(2500000);
 datastorage::DataStorage g_dataStorage;
@@ -248,7 +249,7 @@ void useStoredValues() {
   g_txIntervall = g_dataStorage.get_sendInterval();
   g_highTempThreshold = g_dataStorage.get_highTempThreshold();
 
-  g_resetDaily.set_maxCnt(86400 / g_txIntervall);
+  g_forceReset.set_maxCnt(SECONDS_TO_REBOOT / g_txIntervall);
 }
 
 
@@ -259,7 +260,7 @@ void setup() {
     #endif
 
     g_Time.reset();
-    g_resetDaily.resetCnt();
+    g_forceReset.resetCnt();
     g_wdtFailSafe.resetCnt();
     g_loopFailSafe.resetCnt();
 
@@ -435,7 +436,7 @@ void loop() {
     os_runloop_once();
 
   } else {
-    g_resetDaily.increaseCnt();
+    g_forceReset.increaseCnt();
     g_loopFailSafe.resetCnt();
 
     sleepForATime();
