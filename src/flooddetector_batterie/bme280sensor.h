@@ -12,6 +12,7 @@ class BME280Sensor {
     BME280Sensor();
     void init();
     bool fetchData();
+    bool fetchDataOnlyTempHum();
 
     float getTemperature();
     float getHumidity();
@@ -20,11 +21,14 @@ class BME280Sensor {
     void print();
     
   private:
-    float temperature;
-    float humidity;
-    float pressure;
+    float _temperature;
+    float _humidity;
+    float _pressure;
 
-    bool startReading();
+    void initReading();
+    void deinitReading();
+    bool startForcedReading();
+    bool startForcedReadingWithoutPressure();
     bool readTemperature();
     bool readHumidity();
     bool readPressure();
