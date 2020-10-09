@@ -26,7 +26,8 @@
 #include <lmic.h>
 #include <hal/hal.h>
 
-#define ACTIVATE_PRINT 1
+//#define ACTIVATE_PRINT 1
+#define SECONDS_DURING_SLEEP 8
 
 #include "LowPower.h"
 #include <CayenneLPP.h>
@@ -37,6 +38,7 @@
 #include "button.h"
 #include "floodsensor.h"
 #include "led.h"
+#include "time.h"
 
 bme280_sensor::BME280Sensor g_bmeSensor;
 battery::Battery g_battery;
@@ -47,6 +49,7 @@ datastorage::DataStorage g_dataStorage;
 button::Button g_button;
 floodsensor::FloodSensor g_floodSensor(8);
 led::Led g_led(9);
+time::Time g_Time(SECONDS_DURING_SLEEP);
 
 enum sendMode {
   cyclic = 0,
@@ -55,15 +58,16 @@ enum sendMode {
   test = 3
 };
 
-const uint8_t g_secondsDuringSleep = 8;
-const uint8_t g_floodCheckSleepCycles = (32 / g_secondsDuringSleep); // Flood check sleep cycles (seconds in multiples of 8 / seconds during one sleep cycle)
-const uint8_t g_tempCheckSleepCycles = (120 / g_secondsDuringSleep); // Temp check sleep cycles (seconds in multiples of 8 / seconds during one sleep cycle)
+const uint8_t g_floodCheckSleepCycles = (32 / SECONDS_DURING_SLEEP); // Flood check sleep cycles (seconds in multiples of 8 / seconds during one sleep cycle)
+const uint8_t g_tempCheckSleepCycles = (120 / SECONDS_DURING_SLEEP); // Temp check sleep cycles (seconds in multiples of 8 / seconds during one sleep cycle)
 
-unsigned g_txIntervall = 0;
+uint16_t g_txIntervall = 0;
 
 uint8_t g_sendMode = sendMode::cyclic;
 bool g_isFloodMsgAck = false;
 uint8_t g_highTempThreshold = 0;
+
+unsigned long g_lastCyclicSend = 0;
 
 bool next = false;
 
@@ -152,8 +156,8 @@ void handleRxData() {
     uint16_t sendInterval = rxData[0];
     uint16_t highTempThreshold = rxData[1];
 
-    // Send interval can only be between 190 seconds and 18 h 12,5 minutes
-    if(sendInterval >= 190 && sendInterval <= 0xffff) {
+    // Send interval can only be between 180 seconds and 18 h 12,5 minutes
+    if(sendInterval >= 180 && sendInterval <= 0xffff) {
       g_dataStorage.set_sendInterval(sendInterval);
     }
 
@@ -254,6 +258,11 @@ void setup() {
       Serial.println(F("Enter setup"));
     #endif
 
+    g_Time.reset();
+    g_resetDaily.resetCnt();
+    g_wdtFailSafe.resetCnt();
+    g_loopFailSafe.resetCnt();
+
     g_dataStorage.init();
     #ifdef ACTIVATE_PRINT
       g_dataStorage.print();
@@ -337,45 +346,79 @@ bool doTestButtonCheck() {
 }
 
 void sleepForATime() {
-  const int sleepcycles = g_txIntervall / g_secondsDuringSleep;  // calculate the number of sleepcycles (g_secondsDuringSleep) given the g_txIntervall
-  const int floodCheckCycles = (g_floodCheckSleepCycles <= sleepcycles) ? g_floodCheckSleepCycles : sleepcycles;
-  const int tempCheckCycles = (g_tempCheckSleepCycles <= sleepcycles) ? g_tempCheckSleepCycles : sleepcycles;
+  const uint16_t sleepcycles = g_floodCheckSleepCycles;  // calculate the number of sleepcycles (g_secondsDuringSleep) given the g_txIntervall
+  const uint16_t tempCheckCycles = (g_tempCheckSleepCycles <= sleepcycles) ? g_tempCheckSleepCycles : sleepcycles;
+  unsigned long currSleepCycles = 0;
+
+  g_Time.update();
+  const unsigned long nextCyclicSendTime = g_Time.calculateNextCyclicSendTime(g_lastCyclicSend, g_txIntervall);
+  
+  g_sendMode = sendMode::cyclic;
+
   #ifdef ACTIVATE_PRINT
     Serial.print(F("Enter sleeping for "));
     Serial.print(sleepcycles);
     Serial.println(F(" cycles of 8 seconds"));
+    Serial.print(F("Curr time: "));
+    Serial.println(g_Time.get_currentTime());
+    
     Serial.flush(); // give the serial print chance to complete
   #endif
-
-  g_sendMode = sendMode::cyclic;
   
-  for (int i=1; i<=sleepcycles; i++) {
-    g_wdtFailSafe.resetCnt();
-    // Enter power down state for 8 s with ADC and BOD module disabled
-    LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF);
-    // If watchdog not triggered, go back to sleep. End sleep by other interrupt 
-     while(!LowPower.isWdtTriggered())
-    {
-      g_wdtFailSafe.increaseCnt();
-      LowPower.returnToSleep();
+  while( !g_Time.cyclicSleepTimeOver(g_lastCyclicSend, nextCyclicSendTime) ) {
+    for (int i=1; i<=sleepcycles; i++) {
+      g_wdtFailSafe.resetCnt();
+      // Enter power down state for 8 s with ADC and BOD module disabled
+      LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF);
+      // If watchdog not triggered, go back to sleep. End sleep by other interrupt 
+       while(!LowPower.isWdtTriggered())
+      {
+        g_wdtFailSafe.increaseCnt();
+        LowPower.returnToSleep();
+      }
     }
 
+    // To compensate for incorrect times 
+    if(0 == currSleepCycles) {
+      g_Time.update(2);
+    }
+    
+    currSleepCycles += sleepcycles;
+
     // Flood check
-    if((i % floodCheckCycles == 0) && doFloodCheck()) {
+    if(doFloodCheck()) {
+      g_Time.update(sleepcycles);
       break;
     }
 
     // Temperature check
-    if((i % tempCheckCycles == 0) && doHighTempCheck()) {
-        break;
+    if((currSleepCycles % tempCheckCycles == 0) && doHighTempCheck()) {
+      g_Time.update(sleepcycles);
+      break;
     }
 
     // Test button check
     if(doTestButtonCheck()){
+      g_Time.update(sleepcycles);
       break;
     } 
 
     g_led.switchOff();
+    g_Time.update(sleepcycles);
+    
+    #ifdef ACTIVATE_PRINT
+      Serial.print(F("Curr time: "));
+      Serial.print(g_Time.get_currentTime());
+      Serial.print(F(", next cyclic send time: "));
+      Serial.print(nextCyclicSendTime);
+      Serial.print(F(", CurrSleepcycles: "));
+      Serial.println(currSleepCycles);
+      Serial.flush(); // give the serial print chance to complete
+    #endif
+  }
+
+  if(sendMode::cyclic == g_sendMode) {
+    g_lastCyclicSend = nextCyclicSendTime;
   }
    
   #ifdef ACTIVATE_PRINT
@@ -383,6 +426,8 @@ void sleepForATime() {
   #endif
 }
 
+
+  
 void loop() {
   extern volatile unsigned long timer0_overflow_count;
   
