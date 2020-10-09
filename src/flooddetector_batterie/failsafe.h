@@ -5,7 +5,7 @@
 
 namespace failsafe{
 
-#define ACTIVATE_PRINT 1
+//#define ACTIVATE_PRINT 1
 
 class FailSafe{
   public:

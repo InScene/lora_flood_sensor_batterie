@@ -42,7 +42,7 @@ void FailSafe::resetWhenCounterMaxReached() {
       Serial.println(F("Reset device"));
       Serial.flush(); // give the serial print chance to complete
     #endif
-    //resetFunc();  //call reset
+    resetFunc();  //call reset
   } else {
     #ifdef ACTIVATE_PRINT
       Serial.print(F("Reset counter: "));
@@ -62,7 +62,7 @@ void FailSafe::resetWhenLoopCounterMaxReached() {
       Serial.flush(); // give the serial print chance to complete
     #endif
     LOOP_CNT = 0;
-    //resetFunc();  //call reset
+    resetFunc();  //call reset
   }
 }
 
