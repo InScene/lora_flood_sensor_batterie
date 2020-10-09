@@ -14,7 +14,9 @@ void DataStorage::init() {
     readValues();
     
   } else {
-    Serial.println(F("Eeprom crc error. Use default values."));
+    #ifdef ACTIVATE_PRINT
+      Serial.println(F("Eeprom crc error. Use default values."));
+    #endif
   }
 }
 
@@ -43,14 +45,16 @@ void DataStorage::persist() {
   unsigned long crc = calculate_crc();
   writeLong(_crcAdr, crc);
 
-  if(!isValid()) {
-    Serial.print(F("Eeprom error during persisting values. calcCrc:"));
-    Serial.print(crc, HEX);
-    Serial.print(F(", oldCrc:"));
-    Serial.print(old_crc, HEX);
-    Serial.print(F(", storedCrc:"));
-    Serial.println(readLong(_crcAdr), HEX);
-  }
+  #ifdef ACTIVATE_PRINT
+    if(!isValid()) {
+        Serial.print(F("Eeprom error during persisting values. calcCrc:"));
+        Serial.print(crc, HEX);
+        Serial.print(F(", oldCrc:"));
+        Serial.print(old_crc, HEX);
+        Serial.print(F(", storedCrc:"));
+        Serial.println(readLong(_crcAdr), HEX);
+    }
+  #endif
 }
 
 void DataStorage::print() {
