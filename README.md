@@ -29,14 +29,24 @@ The data is sent in the CayenneLPP format every 10 minutes. The channels are ass
 
 ## Reveiving data (downlink)
 Following data could be received via downlink as raw little endian hex values:
-1. Send interval in seconds (min= 190 seconds, max=86400 seconds)
+1. Send interval in seconds (min= 190 seconds, max=65535 seconds = 18h 12,5min)
 2. High temperature threshold in degrees without decimal place (min= 1 °C, max=84 °C)
+After a reset a msg will be send and also data will be received directly.
 
 **Important** All values must always be sent simultaneously
 
-**Example:** BE 00 32 00
+**Example:** 
+BE 00 32 00
 * BE 00 : 190 = send interval set to 190 seconds
 * 32 00 : 50 = high temperature threshold set to 50°
-    
+
+84 03 01 00
+* BE 00 : 900 = send interval set to 900 seconds
+* 01 00 : 1 = high temperature threshold set to 1° 
+
+C0 A8 54 00
+* C0 A8 : 43200 =  send interval set to 43200 seconds (=12 h)
+* 54 00 : 84 = high temperature threshold set to 84° 
+
 ## Battery
 I use a 18650 directly connected. In one test a message could be sent down to the voltage of 3.41 V. 
