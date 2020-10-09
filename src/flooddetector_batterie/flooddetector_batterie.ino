@@ -26,7 +26,8 @@
 #include <lmic.h>
 #include <hal/hal.h>
 
-// use low power sleep; comment next line to not use low power sleep
+#define ACTIVATE_PRINT 1
+
 #include "LowPower.h"
 #include <CayenneLPP.h>
 #include "bme280sensor.h"
@@ -55,17 +56,17 @@ enum sendMode {
 };
 
 const uint8_t g_secondsDuringSleep = 8;
-const uint8_t g_floodCheckSleepCycles = (32 / 8); // Flood check sleep cycles (seconds in multiples of 8 / seconds during one sleep cycle)
-const uint8_t g_tempCheckSleepCycles = (304 / 8); // Temp check sleep cycles (seconds in multiples of 8 / seconds during one sleep cycle)
+const uint8_t g_floodCheckSleepCycles = (32 / g_secondsDuringSleep); // Flood check sleep cycles (seconds in multiples of 8 / seconds during one sleep cycle)
+const uint8_t g_tempCheckSleepCycles = (120 / g_secondsDuringSleep); // Temp check sleep cycles (seconds in multiples of 8 / seconds during one sleep cycle)
 
 unsigned g_txIntervall = 0;
 
 uint8_t g_sendMode = sendMode::cyclic;
 bool g_isFloodMsgAck = false;
 uint8_t g_highTempThreshold = 0;
+
 bool next = false;
 
-#define ACTIVATE_PRINT 1
 
 /****************************************** LoRa *******************************/
 #include "radio_keys.h"
@@ -151,8 +152,8 @@ void handleRxData() {
     uint16_t sendInterval = rxData[0];
     uint16_t highTempThreshold = rxData[1];
 
-    // Send interval can only be between 190 seconds and one day
-    if(sendInterval >= 190 && sendInterval <= 86400) {
+    // Send interval can only be between 190 seconds and 18 h 12,5 minutes
+    if(sendInterval >= 190 && sendInterval <= 0xffff) {
       g_dataStorage.set_sendInterval(sendInterval);
     }
 
@@ -206,7 +207,7 @@ CayenneLPP getCayenneFormatedData() {
   CayenneLPP lpp(30);
 
   /**** get BME280 Data ****/      
-  if(g_bmeSensor.fetchData()) {
+  if(g_bmeSensor.fetchDataOnlyTempHum()) {
     lpp.addTemperature(1, g_bmeSensor.getTemperature());
     lpp.addRelativeHumidity(2, g_bmeSensor.getHumidity());
     #ifdef ACTIVATE_PRINT
