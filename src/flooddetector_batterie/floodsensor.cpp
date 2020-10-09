@@ -28,10 +28,6 @@ void FloodSensor::updateDetectCnt(const int currSensorVal) {
   } else {
     (_detectCnt > _detectThresholdMin) ? _detectCnt-- : 0;
   }
-
-  Serial.print(F("Flood detect cnt: "));
-  Serial.println(_detectCnt);
-  Serial.flush();
 }
 
 void FloodSensor::updateFloodDetecedVal() {
