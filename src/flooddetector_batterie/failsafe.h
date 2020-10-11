@@ -5,38 +5,21 @@
 
 namespace failsafe{
 
-//#define ACTIVATE_PRINT 1
+#define MAX_TIME_VALUE 0xFFFFFFFF
 
 class FailSafe{
   public:
-    FailSafe(const unsigned long maxCnt = 3600);
+    FailSafe(const unsigned long maxTime = 86400);
 
-    void set_maxCnt(const unsigned long maxCnt);
-    void increaseCnt();
-    void resetCnt();
-    
-    void resetWhenCounterMaxReached();
-    void resetWhenLoopCounterMaxReached();
-    bool failsaveWdtEndlessLoopInterrupter();
-    void loopOk();
-    void wdtOk();
-    
+    void set_maxTime(unsigned long maxTime);
+    void updateTime(unsigned long currTime);
+    void resetTime(unsigned long currTime);
+   
   private:
-    unsigned long _maxCount;
-    unsigned long _cnt;
+    unsigned long _maxTime;
+    unsigned long _startTime;
+    unsigned long _currTime;
     
-    // Resette Device jeden Tag
-    const unsigned RESET_INTERVAL;
-    unsigned RESET_CNT;
-    
-    // Resette Device, wenn Loop Cnt max erreicht. Passiert nur im Fehlerfall.
-    const unsigned long LOOP_MAX_CNT; // Das sind ca. 5 Min
-    unsigned long LOOP_CNT;
-    
-    // Sicherstellen, dass die WDT Sleep Schleife im Fehlerfall unterbrochen wird
-    const unsigned long WDT_LOOP_MAX_CNT;
-    unsigned long WDT_LOOP_CNT;
-
     void(* resetFunc) (void) = 0; //declare reset function @ address 0
 
 };
