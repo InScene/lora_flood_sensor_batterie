@@ -50,3 +50,6 @@ C0 A8 54 00
 
 ## Battery
 I use a 18650 directly connected. In one test a message could be sent down to the voltage of 3.41 V. 
+
+## Important
+Every two days a reset will be done to force a TTN rejoin. This is done for of security reasons, to get new keys for the TTN connection. 
