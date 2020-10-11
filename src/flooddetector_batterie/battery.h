@@ -9,14 +9,19 @@ namespace battery{
 
 class Battery{
   public:
-    Battery();
+    Battery(const uint8_t pinOnOff, const uint8_t pinAdc);
     void init();
     void fetchData();
     float getVoltage();
     void print();
     
   private:
-    uint16_t adcValue;
+    const uint8_t _pinOnOff;
+    const uint8_t _pinAdc;
+    uint16_t _adcValue;
+
+    void switchMeasurementOn();
+    void switchMeasurementOff();
 };
 }
 #endif
