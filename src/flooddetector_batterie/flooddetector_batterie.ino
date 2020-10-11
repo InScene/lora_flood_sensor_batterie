@@ -28,7 +28,8 @@
 
 //#define ACTIVATE_PRINT 1
 #define SECONDS_DURING_SLEEP 8 // Number of seconds the microcontroller is in deep sleep 
-#define SECONDS_TO_REBOOT 86400 // Number of seconds before a reboot is done to force a new ttn join. Security feature, to get a new key
+#define MILLISECONDS_TO_REBOOT 172800000 // Number of milliseconds before a reboot is done to force a new ttn join. Security feature, to get a new key
+#define MAX_MILLISECONDS_TO_LOOP 300000 // Number of milliseconds the loop maximal can run before a reboot is done.
 
 #include "LowPower.h"
 #include <CayenneLPP.h>
@@ -42,10 +43,10 @@
 #include "time.h"
 
 bme280_sensor::BME280Sensor g_bmeSensor;
-battery::Battery g_battery;
-failsafe::FailSafe g_forceReset;
-failsafe::FailSafe g_wdtFailSafe(1000);
-failsafe::FailSafe g_loopFailSafe(2500000);
+battery::Battery g_battery(10, A0);
+failsafe::FailSafe g_forceReset(MILLISECONDS_TO_REBOOT);
+failsafe::FailSafe g_loopFailSafe(MAX_MILLISECONDS_TO_LOOP);
+failsafe::FailSafe g_sleepFailSafe;
 datastorage::DataStorage g_dataStorage;
 button::Button g_button;
 floodsensor::FloodSensor g_floodSensor(8);
@@ -118,8 +119,9 @@ void onEvent (ev_t ev) {
               if(!g_floodSensor.isFloodDetected()) {
                 g_isFloodMsgAck = false;
               }
-              
             }
+
+            g_led.switchOff();
             
             if(LMIC.dataLen) { // data received in rx slot after tx
               handleRxData();
@@ -249,7 +251,7 @@ void useStoredValues() {
   g_txIntervall = g_dataStorage.get_sendInterval();
   g_highTempThreshold = g_dataStorage.get_highTempThreshold();
 
-  g_forceReset.set_maxCnt(SECONDS_TO_REBOOT / g_txIntervall);
+  g_sleepFailSafe.set_maxTime(((unsigned long)g_txIntervall)*2 *1000);
 }
 
 
@@ -259,10 +261,12 @@ void setup() {
       Serial.println(F("Enter setup"));
     #endif
 
-    g_Time.reset();
-    g_forceReset.resetCnt();
-    g_wdtFailSafe.resetCnt();
-    g_loopFailSafe.resetCnt();
+    g_Time.update();
+    const unsigned long currTime = g_Time.get_currentTime();
+    
+    g_forceReset.resetTime(currTime);
+    g_loopFailSafe.resetTime(currTime);
+    g_sleepFailSafe.resetTime(currTime);
 
     g_dataStorage.init();
     #ifdef ACTIVATE_PRINT
@@ -351,11 +355,11 @@ void sleepForATime() {
   const uint16_t tempCheckCycles = (g_tempCheckSleepCycles <= sleepcycles) ? g_tempCheckSleepCycles : sleepcycles;
   unsigned long currSleepCycles = 0;
 
+  g_sendMode = sendMode::cyclic;
   g_Time.update();
   const unsigned long nextCyclicSendTime = g_Time.calculateNextCyclicSendTime(g_lastCyclicSend, g_txIntervall);
+  g_sleepFailSafe.resetTime(g_Time.get_currentTime());
   
-  g_sendMode = sendMode::cyclic;
-
   #ifdef ACTIVATE_PRINT
     Serial.print(F("Enter sleeping for "));
     Serial.print(sleepcycles);
@@ -365,16 +369,14 @@ void sleepForATime() {
     
     Serial.flush(); // give the serial print chance to complete
   #endif
-  
+
   while( !g_Time.cyclicSleepTimeOver(g_lastCyclicSend, nextCyclicSendTime) ) {
     for (int i=1; i<=sleepcycles; i++) {
-      g_wdtFailSafe.resetCnt();
       // Enter power down state for 8 s with ADC and BOD module disabled
       LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF);
       // If watchdog not triggered, go back to sleep. End sleep by other interrupt 
        while(!LowPower.isWdtTriggered())
       {
-        g_wdtFailSafe.increaseCnt();
         LowPower.returnToSleep();
       }
     }
@@ -404,8 +406,8 @@ void sleepForATime() {
       break;
     } 
 
-    g_led.switchOff();
     g_Time.update(sleepcycles);
+    g_sleepFailSafe.updateTime(g_Time.get_currentTime());
     
     #ifdef ACTIVATE_PRINT
       Serial.print(F("Curr time: "));
@@ -431,19 +433,19 @@ void sleepForATime() {
   
 void loop() {
   extern volatile unsigned long timer0_overflow_count;
+  g_Time.update();
+  g_loopFailSafe.updateTime(g_Time.get_currentTime());
+  g_forceReset.updateTime(g_Time.get_currentTime());
   
   if (next == false) {
     os_runloop_once();
 
   } else {
-    g_forceReset.increaseCnt();
-    g_loopFailSafe.resetCnt();
-
     sleepForATime();
     send_data();
-  }
 
-  g_loopFailSafe.increaseCnt();
+    g_loopFailSafe.resetTime(g_Time.get_currentTime());
+  }
 }
 
 void send_data() {

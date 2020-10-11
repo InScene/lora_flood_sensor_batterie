@@ -29,15 +29,15 @@ The data is sent in the CayenneLPP format every 10 minutes. The channels are ass
 
 ## Reveiving data (downlink)
 Following data could be received via downlink as raw little endian hex values:
-1. Send interval in seconds (min= 190 seconds, max=65535 seconds = 18h 12,5min)
+1. Send interval in seconds (min= 180 seconds, max=65535 seconds = 18h 12,5min)
 2. High temperature threshold in degrees without decimal place (min= 1 °C, max=84 °C)
 After a reset a msg will be send and also data will be received directly.
 
 **Important** All values must always be sent simultaneously
 
 **Example:** 
-BE 00 32 00
-* BE 00 : 190 = send interval set to 190 seconds
+B4 00 32 00
+* B4 00 : 180 = send interval set to 180 seconds
 * 32 00 : 50 = high temperature threshold set to 50°
 
 84 03 01 00
